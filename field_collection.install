@@ -5,6 +5,8 @@
  * Install, update and uninstall functions for the field_collection module.
  */
 
+module_load_include('inc', 'field_collection', 'field_collection.entity');
+
 /**
  * Implements hook_schema().
  */

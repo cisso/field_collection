@@ -442,7 +442,6 @@ function field_collection_field_get_path($field) {
  * Implements hook_field_settings_form().
  */
 function field_collection_field_settings_form($field, $instance) {
-
   $form['hide_blank_items'] = array(
     '#type' => 'checkbox',
     '#title' => t('Hide blank items'),
@@ -491,6 +490,7 @@ function field_collection_field_insert($host_entity_type, $host_entity, $field, 
  * Implements hook_field_update().
  *
  * Care about removed field collection items.
+ *
  * Support saving field collection items in @code $item['entity'] @endcode. This
  * may be used to seamlessly create field collection items during host-entity
  * creation or to save changes to the host entity and its collections at once.
@@ -510,7 +510,7 @@ function field_collection_field_update($host_entity_type, $host_entity, $field, 
     return;
   }
 
-  $items_original = !empty($host_entity->original->{$field['field_name']}[$langcode]) ? $host_entity->original->{$field['field_name']}[$langcode] : array();
+  $items_original = !empty($original->{$field['field_name']}[$langcode]) ? $original->{$field['field_name']}[$langcode] : array();
   $original_by_id = array_flip(field_collection_field_item_to_ids($items_original));
 
   foreach ($items as $delta => &$item) {
@@ -518,9 +518,7 @@ function field_collection_field_update($host_entity_type, $host_entity, $field, 
     // If the host entity creates a new revision, save new item-revisions as
     // well.
     if (isset($item['entity']) || !empty($host_entity->revision)) {
-
       if ($entity = field_collection_field_get_entity($item)) {
-
         // If the host entity is saved as new revision, do the same for the item.
         if (!empty($host_entity->revision) || !empty($host_entity->is_new_revision)) {
           $entity->revision = TRUE;
@@ -559,7 +557,7 @@ function field_collection_field_update($host_entity_type, $host_entity, $field, 
     unset($original_by_id[$item['value']]);
   }
 
-  if ($field['translatable']) {
+  if ($field['translatable'] && module_exists('entity_translation') && entity_translation_enabled($entity_type)) {
     unset($host_entity->{$field['field_name']}[LANGUAGE_NONE]);
   }
 

@@ -230,8 +230,8 @@ class FieldCollectionItemEntity extends Entity {
     if ($current_id == $recieved_id) {
       $this->hostEntity = $entity;
       $delta = $this->delta();
-      if (isset($entity->{$this->field_name}[$this->langcode][$delta]['entity'])) {
-        $entity->{$this->field_name}[$this->langcode][$delta]['entity'] = $entity;
+      if (isset($entity->{$this->field_name}[$this->langcode()][$delta]['entity'])) {
+        $entity->{$this->field_name}[$this->langcode()][$delta]['entity'] = $this;
       }
     }
     else {
@@ -343,9 +343,15 @@ class FieldCollectionItemEntity extends Entity {
    * Determines the language code under which the item is stored.
    */
   public function langcode() {
-    if ($this->delta() !== NULL) {
-      return $this->langcode;
+    if ($this->delta() === NULL || empty($this->langcode)) {
+      $this->langcode = field_collection_entity_language('field_collection_item', $this);
     }
+
+    if (empty($this->langcode) || ($this->langcode != LANGUAGE_NONE && (!module_exists('entity_translation') || !entity_translation_enabled('field_collection_item')))) {
+      $this->langcode = LANGUAGE_NONE;
+    }
+
+    return $this->langcode;
   }
 
   /**
@@ -388,7 +394,7 @@ class FieldCollectionItemEntity extends Entity {
     }
 
     // Copy the values of translatable fields for a new field collection item.
-    if (field_collection_item_is_translatable() && !empty($this->is_new) && $this->langcode == LANGUAGE_NONE) {
+    if (field_collection_item_is_translatable() && !empty($this->is_new) && $this->langcode() == LANGUAGE_NONE) {
       $this->copyTranslations();
     }
 
@@ -414,11 +420,12 @@ class FieldCollectionItemEntity extends Entity {
       // @see field_collection_field_presave()
       $delta = $this->delta();
       if (isset($delta)) {
-        $host_entity->{$this->field_name}[$this->langcode][$delta] = array('entity' => $this);
+        $host_entity->{$this->field_name}[$this->langcode()][$delta] = array('entity' => $this);
       }
       else {
-        $host_entity->{$this->field_name}[$this->langcode][] =  array('entity' => $this);
+        $host_entity->{$this->field_name}[$this->langcode()][] = array('entity' => $this);
       }
+
       return entity_save($this->hostEntityType, $host_entity);
     }
   }
@@ -439,6 +446,9 @@ class FieldCollectionItemEntity extends Entity {
    */
   public function copyTranslations($source_language = NULL) {
     $host_et_handler = entity_translation_get_handler($this->hostEntityType(), $this->hostEntity());
+    if (empty($host_et_handler)) {
+      return;
+    }
     $host_languages = array_keys($host_et_handler->getTranslations()->data);
     if (empty($host_languages)) {
       $host_languages = array(entity_language($this->hostEntityType(), $this->hostEntity()));
@@ -466,8 +476,8 @@ class FieldCollectionItemEntity extends Entity {
   protected function deleteHostEntityReference() {
     $delta = $this->delta();
     if ($this->item_id && isset($delta)) {
-      unset($this->hostEntity->{$this->field_name}[$this->langcode][$delta]);
-      entity_save($this->hostEntityType, $this->hostEntity);
+      unset($this->hostEntity()->{$this->field_name}[$this->langcode()][$delta]);
+      entity_save($this->hostEntityType(), $this->hostEntity());
     }
   }
 
@@ -478,7 +488,6 @@ class FieldCollectionItemEntity extends Entity {
    * a field collection item on the default revision of the host should not
    * delete the collection item from archived revisions too. Instead, we delete
    * the current default revision and archive the field collection.
-   *
    */
   public function deleteRevision($skip_host_update = FALSE) {
     if (!$this->revision_id) {
@@ -502,11 +511,8 @@ class FieldCollectionItemEntity extends Entity {
         ->condition('revision_id', $this->revision_id, '<>')
         ->execute()
         ->fetchAssoc();
-      // If no other revision is left, delete. Else archive the item.
-      if (!$row) {
-        $this->delete();
-      }
-      else {
+
+      if ($row) {
         // Make the other revision the default revision and archive the item.
         db_update('field_collection_item')
           ->fields(array('archived' => 1, 'revision_id' => $row['revision_id']))
@@ -514,6 +520,10 @@ class FieldCollectionItemEntity extends Entity {
           ->execute();
         entity_get_controller('field_collection_item')->resetCache(array($this->item_id));
         entity_revision_delete('field_collection_item', $this->revision_id);
+      }
+      if (!$row && !isset($this->hostEntity()->{$this->field_name}[$this->langcode()][$this->delta()])) {
+        // Delete if there is no existing revision or translation to be saved.
+        $this->delete();
       }
     }
   }
